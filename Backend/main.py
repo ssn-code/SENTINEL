@@ -1,21 +1,36 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from typing import List
 import psycopg2
 import json
 import bcrypt
 import jwt
 import datetime
-from typing import List
+import os
+from dotenv import load_dotenv
+
+# ===============================
+# ENVIRONMENT
+# ===============================
+
+load_dotenv()
+
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
 
 # ===============================
 # APP INIT
 # ===============================
 
 app = FastAPI()
-
-SECRET_KEY = "supersecretkey"
-ALGORITHM = "HS256"
 
 # ===============================
 # CORS
@@ -38,12 +53,25 @@ app.add_middleware(
 
 def get_connection():
     return psycopg2.connect(
-        dbname="securesphere",
-        user="shiva",
-        password="ssn1412",
-        host="localhost",
-        port="5432"
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        host=DB_HOST,
+        port=DB_PORT
     )
+
+# ===============================
+# AUTH SECURITY
+# ===============================
+
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 # ===============================
 # AUTH MODELS
@@ -63,19 +91,18 @@ class LoginRequest(BaseModel):
 
 @app.post("/register")
 def register(data: RegisterRequest):
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT id FROM users WHERE email = %s", (data.email,))
+    cur.execute("SELECT id FROM users WHERE email=%s", (data.email,))
     if cur.fetchone():
-        cur.close()
-        conn.close()
         raise HTTPException(status_code=400, detail="User already exists")
 
     hashed = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
 
     cur.execute(
-        "INSERT INTO users (email, hashed_password, role) VALUES (%s, %s, %s)",
+        "INSERT INTO users (email, hashed_password, role) VALUES (%s,%s,%s)",
         (data.email, hashed, "public")
     )
 
@@ -88,13 +115,15 @@ def register(data: RegisterRequest):
 
 @app.post("/login")
 def login(data: LoginRequest):
+
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT id, hashed_password, role FROM users WHERE email = %s",
+        "SELECT id, hashed_password, role FROM users WHERE email=%s",
         (data.email,)
     )
+
     user = cur.fetchone()
 
     cur.close()
@@ -136,6 +165,7 @@ class IncidentCreate(BaseModel):
 
 @app.get("/incidents")
 def get_incidents():
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -145,6 +175,7 @@ def get_incidents():
     """)
 
     rows = cur.fetchall()
+
     cur.close()
     conn.close()
 
@@ -167,16 +198,19 @@ def get_incidents():
         "features": features
     }
 
-
 @app.post("/incidents")
-def create_incident(incident: IncidentCreate):
+def create_incident(
+    incident: IncidentCreate,
+    user = Depends(get_current_user)
+):
+
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
         INSERT INTO incidents (location, crime_type, description, verified)
         VALUES (
-            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+            ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,
             %s,
             %s,
             false
@@ -189,6 +223,7 @@ def create_incident(incident: IncidentCreate):
     ))
 
     conn.commit()
+
     cur.close()
     conn.close()
 
@@ -200,13 +235,14 @@ def create_incident(incident: IncidentCreate):
 
 @app.get("/dashboard")
 def get_dashboard():
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("SELECT COUNT(*) FROM incidents;")
+    cur.execute("SELECT COUNT(*) FROM incidents")
     total = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM incidents WHERE verified = true;")
+    cur.execute("SELECT COUNT(*) FROM incidents WHERE verified=true")
     verified = cur.fetchone()[0]
 
     cur.execute("""
@@ -214,8 +250,9 @@ def get_dashboard():
         FROM incidents
         GROUP BY crime_type
         ORDER BY count DESC
-        LIMIT 1;
+        LIMIT 1
     """)
+
     top_crime = cur.fetchone()
 
     cur.close()
@@ -234,6 +271,7 @@ def get_dashboard():
 
 @app.get("/heatmap")
 def get_heatmap():
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -241,13 +279,14 @@ def get_heatmap():
         SELECT
             ST_AsGeoJSON(
                 ST_Centroid(ST_Collect(location::geometry))
-            ) AS geometry,
-            COUNT(*) AS incident_count
+            ),
+            COUNT(*)
         FROM incidents
-        GROUP BY ST_SnapToGrid(location::geometry, 0.005);
+        GROUP BY ST_SnapToGrid(location::geometry,0.005)
     """)
 
     rows = cur.fetchall()
+
     cur.close()
     conn.close()
 
@@ -272,25 +311,27 @@ def get_heatmap():
 # ===============================
 
 class RouteRequest(BaseModel):
-    coordinates: List[List[float]]  # [[lat, lng], ...]
+    coordinates: List[List[float]]
 
 @app.post("/route-risk")
 def calculate_route_risk(route: RouteRequest):
+
     conn = get_connection()
     cur = conn.cursor()
 
     total_risk = 0
 
     for lat, lng in route.coordinates:
+
         cur.execute("""
             SELECT COUNT(*)
             FROM incidents
             WHERE ST_DWithin(
                 location,
-                ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
+                ST_SetSRID(ST_MakePoint(%s,%s),4326)::geography,
                 300
-            );
-        """, (lng, lat))
+            )
+        """,(lng,lat))
 
         count = cur.fetchone()[0]
         total_risk += count
