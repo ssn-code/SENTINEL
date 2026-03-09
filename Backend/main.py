@@ -29,13 +29,10 @@ ALGORITHM = "HS256"
 # ===============================
 # APP INIT
 # ===============================
-
 app = FastAPI()
-
 # ===============================
 # CORS
 # ===============================
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -46,11 +43,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # ===============================
 # DATABASE CONNECTION
 # ===============================
-
 def get_connection():
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -59,7 +54,6 @@ def get_connection():
         host=DB_HOST,
         port=DB_PORT
     )
-
 # ===============================
 # AUTH SECURITY
 # ===============================
@@ -76,19 +70,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # ===============================
 # AUTH MODELS
 # ===============================
-
 class RegisterRequest(BaseModel):
     email: str
     password: str
-
 class LoginRequest(BaseModel):
     email: str
     password: str
-
 # ===============================
 # AUTH ROUTES
 # ===============================
-
 @app.post("/register")
 def register(data: RegisterRequest):
 
@@ -98,45 +88,33 @@ def register(data: RegisterRequest):
     cur.execute("SELECT id FROM users WHERE email=%s", (data.email,))
     if cur.fetchone():
         raise HTTPException(status_code=400, detail="User already exists")
-
     hashed = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
-
     cur.execute(
         "INSERT INTO users (email, hashed_password, role) VALUES (%s,%s,%s)",
         (data.email, hashed, "public")
     )
-
     conn.commit()
     cur.close()
     conn.close()
-
     return {"message": "User registered successfully"}
-
-
 @app.post("/login")
 def login(data: LoginRequest):
 
     conn = get_connection()
     cur = conn.cursor()
-
     cur.execute(
         "SELECT id, hashed_password, role FROM users WHERE email=%s",
         (data.email,)
     )
 
     user = cur.fetchone()
-
     cur.close()
     conn.close()
-
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
     user_id, hashed_password, role = user
-
     if not bcrypt.checkpw(data.password.encode(), hashed_password.encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
     token = jwt.encode(
         {
             "user_id": user_id,
@@ -146,41 +124,32 @@ def login(data: LoginRequest):
         SECRET_KEY,
         algorithm=ALGORITHM
     )
-
     return {"access_token": token}
-
 # ===============================
 # INCIDENT MODELS
 # ===============================
-
 class IncidentCreate(BaseModel):
     latitude: float
     longitude: float
     crime_type: str
     description: str
-
 # ===============================
 # INCIDENT ROUTES
 # ===============================
-
 @app.get("/incidents")
 def get_incidents():
 
     conn = get_connection()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT id, crime_type, ST_AsGeoJSON(location), description, verified
         FROM incidents;
     """)
-
     rows = cur.fetchall()
 
     cur.close()
     conn.close()
-
     features = []
-
     for row in rows:
         features.append({
             "type": "Feature",
@@ -192,12 +161,10 @@ def get_incidents():
                 "verified": row[4]
             }
         })
-
     return {
         "type": "FeatureCollection",
         "features": features
     }
-
 @app.post("/incidents")
 def create_incident(
     incident: IncidentCreate,
@@ -206,7 +173,6 @@ def create_incident(
 
     conn = get_connection()
     cur = conn.cursor()
-
     cur.execute("""
         INSERT INTO incidents (location, crime_type, description, verified)
         VALUES (
@@ -221,18 +187,14 @@ def create_incident(
         incident.crime_type,
         incident.description
     ))
-
     conn.commit()
 
     cur.close()
     conn.close()
-
     return {"message": "Incident submitted"}
-
 # ===============================
 # DASHBOARD
 # ===============================
-
 @app.get("/dashboard")
 def get_dashboard():
 
@@ -244,7 +206,6 @@ def get_dashboard():
 
     cur.execute("SELECT COUNT(*) FROM incidents WHERE verified=true")
     verified = cur.fetchone()[0]
-
     cur.execute("""
         SELECT crime_type, COUNT(*) as count
         FROM incidents
@@ -254,27 +215,22 @@ def get_dashboard():
     """)
 
     top_crime = cur.fetchone()
-
     cur.close()
     conn.close()
-
     return {
         "total_incidents": total,
         "verified_incidents": verified,
         "top_crime_type": top_crime[0] if top_crime else None,
         "top_crime_count": top_crime[1] if top_crime else 0
     }
-
 # ===============================
 # HEATMAP
 # ===============================
-
 @app.get("/heatmap")
 def get_heatmap():
 
     conn = get_connection()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT
             ST_AsGeoJSON(
@@ -284,14 +240,11 @@ def get_heatmap():
         FROM incidents
         GROUP BY ST_SnapToGrid(location::geometry,0.005)
     """)
-
     rows = cur.fetchall()
 
     cur.close()
     conn.close()
-
     features = []
-
     for row in rows:
         features.append({
             "type": "Feature",
@@ -300,16 +253,13 @@ def get_heatmap():
                 "count": row[1]
             }
         })
-
     return {
         "type": "FeatureCollection",
         "features": features
     }
-
 # ===============================
 # ROUTE RISK
 # ===============================
-
 class RouteRequest(BaseModel):
     coordinates: List[List[float]]
 
@@ -318,9 +268,7 @@ def calculate_route_risk(route: RouteRequest):
 
     conn = get_connection()
     cur = conn.cursor()
-
     total_risk = 0
-
     for lat, lng in route.coordinates:
 
         cur.execute("""
@@ -335,17 +283,14 @@ def calculate_route_risk(route: RouteRequest):
 
         count = cur.fetchone()[0]
         total_risk += count
-
     cur.close()
     conn.close()
-
     if total_risk < 20:
         level = "Low"
     elif total_risk < 60:
         level = "Medium"
     else:
         level = "High"
-
     return {
         "risk_score": total_risk,
         "risk_level": level
