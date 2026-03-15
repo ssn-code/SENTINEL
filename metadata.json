@@ -1,0 +1,5 @@
+{
+  "name": "Crime Reporter",
+  "description": "Regional Safety Intelligence Dashboard powered by NCRB data, featuring real-time analytics, region comparisons, and safety trends.",
+  "requestFramePermissions": []
+}
