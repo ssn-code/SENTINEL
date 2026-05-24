@@ -1,8 +1,8 @@
 node_modules/
-build/
+venv/
+__pycache__/
+*.pyc
+.env
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+build/
+
