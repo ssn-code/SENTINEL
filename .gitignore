@@ -1,8 +1,54 @@
+# Dependencies
 node_modules/
+jspm_packages/
+web_modules/
+backend/venv/
 venv/
+.venv/
+env/
+ENV/
+
+# Pycache & Python local artifacts
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+.tox/
+.coverage
+.cache
+*.log
+
+# Build & Bundling outputs
 dist/
 build/
+out/
+.next/
+.nuxt/
+.parcel-cache/
+
+# Secrets & Environment configs (Maximum Security)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.bak
+*.env
+*.pem
+*.key
+*.cert
+secrets.json
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.DS_Store
+Thumbs.db
 
