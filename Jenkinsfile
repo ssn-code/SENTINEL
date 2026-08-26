@@ -27,7 +27,9 @@ pipeline {
                         --exclude='dist/' \
                         ./ ${DEPLOY_PATH}/
 
-                    if [ ! -d "${DEPLOY_PATH}/backend/venv" ]; then
+                    if [ ! -x "${DEPLOY_PATH}/backend/venv/bin/python3" ] || ! "${DEPLOY_PATH}/backend/venv/bin/python3" -c "import sys" >/dev/null 2>&1; then
+                        echo "Virtual environment is missing or broken, recreating..."
+                        rm -rf "${DEPLOY_PATH}/backend/venv"
                         python3 -m venv ${DEPLOY_PATH}/backend/venv
                     fi
 
@@ -69,7 +71,7 @@ pipeline {
                 echo 'Deploying compiled frontend assets to web root...'
                 sh '''
                     if [ -d "frontend/dist" ]; then
-                        rsync -av --no-owner --no-group --delete \
+                        rsync -av --no-owner --no-group --no-times --no-perms --delete \
                             frontend/dist/ ${FRONTEND_WWW_PATH}/
                     else
                         echo "Build output directory not found!"
@@ -82,7 +84,7 @@ pipeline {
         stage('Restart Backend') {
             steps {
                 echo 'Restarting backend service...'
-                sh 'sudo systemctl restart sentinel-backend.service'
+                sh 'sudo systemctl restart sentinel.service'
             }
         }
     }
