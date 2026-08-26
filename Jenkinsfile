@@ -17,9 +17,7 @@ pipeline {
             steps {
                 echo 'Deploying backend source files and preparing virtual environment...'
                 sh '''
-                    # Synchronize the backend directory from workspace to target deployment path, 
-                    # ensuring that venv, .env, and cache files are NOT overwritten or deleted.
-                    rsync -av --delete \
+                    rsync -av --no-owner --no-group --delete \
                         --exclude='venv/' \
                         --exclude='.env' \
                         --exclude='__pycache__/' \
@@ -29,12 +27,10 @@ pipeline {
                         --exclude='dist/' \
                         ./ ${DEPLOY_PATH}/
 
-                    # Ensure target virtualenv exists
                     if [ ! -d "${DEPLOY_PATH}/backend/venv" ]; then
                         python3 -m venv ${DEPLOY_PATH}/backend/venv
                     fi
 
-                    # Update pip and dependencies
                     ${DEPLOY_PATH}/backend/venv/bin/python3 -m pip install --upgrade pip
                     ${DEPLOY_PATH}/backend/venv/bin/python3 -m pip install -r ${DEPLOY_PATH}/backend/requirements.txt
                 '''
@@ -71,10 +67,10 @@ pipeline {
         stage('Deploy Frontend') {
             steps {
                 echo 'Deploying compiled frontend assets to web root...'
-                // Build has succeeded in the workspace. Deploy the build output.
                 sh '''
                     if [ -d "frontend/dist" ]; then
-                        rsync -av --delete frontend/dist/ ${FRONTEND_WWW_PATH}/
+                        rsync -av --no-owner --no-group --delete \
+                            frontend/dist/ ${FRONTEND_WWW_PATH}/
                     else
                         echo "Build output directory not found!"
                         exit 1
