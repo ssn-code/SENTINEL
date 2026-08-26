@@ -17,7 +17,7 @@ pipeline {
             steps {
                 echo 'Deploying backend source files and preparing virtual environment...'
                 sh '''
-                    rsync -av --no-owner --no-group --no-times --delete \
+                    rsync -av --no-owner --no-group --no-times --no-perms --delete \
                         --exclude='venv/' \
                         --exclude='.env' \
                         --exclude='__pycache__/' \
